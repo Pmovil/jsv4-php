@@ -39,9 +39,9 @@ class Jsv4 {
 	}
 	
 	static public function coerce($data, $schema) {
-		if (is_object($data) || is_array($data)) {
-			$data = unserialize(serialize($data));
-		}
+		//if (is_object($data) || is_array($data)) {
+		//	$data = unserialize(serialize($data));
+		//}
 		$result = new Jsv4($data, $schema, FALSE, TRUE);
 		if ($result->valid) {
 			$result->value = $result->data;
@@ -158,8 +158,11 @@ class Jsv4 {
 				$types = array($types);
 			}
 			foreach ($types as $type) {
-				if ($type == "object" && is_object($this->data)) {
+				if ($type == "object") {
+                                    if(is_object($this->data))
 					return;
+                                    if($this->coerce && is_array($this->data))
+                                        return;
 				} elseif ($type == "array" && is_array($this->data)) {
 					return;
 				} elseif ($type == "string" && is_string($this->data)) {
@@ -186,10 +189,10 @@ class Jsv4 {
 							return;
 						}
 					} else if ($type == "integer") {
-						if ((int)$this->data == $this->data) {
-							$this->data = (int)$this->data;
-							return;
-						}
+                                                if (is_numeric($this->data)) {
+                                                    $this->data = (int)$this->data;
+                                                    return;
+                                                }
 					} else if ($type == "string") {
 						if (is_numeric($this->data)) {
 							$this->data = "".$this->data;
@@ -241,15 +244,15 @@ class Jsv4 {
 	}
 	
 	private function checkObject() {
+                if($this->coerce && is_array($this->data)){
+                    $this->data = (object)$this->data;
+                }
 		if (!is_object($this->data)) {
 			return;
 		}
 		if (isset($this->schema->required)) {
 			foreach ($this->schema->required as $index => $key) {
 				if (!array_key_exists($key, (array) $this->data)) {
-					if ($this->coerce && $this->createValueForProperty($key)) {
-						continue;
-					}
 					$this->fail(JSV4_OBJECT_REQUIRED, "", "/required/{$index}", "Missing required property: {$key}");
 				}
 			}
@@ -484,48 +487,6 @@ class Jsv4 {
 		}
 	}
 	
-	private function createValueForProperty($key) {
-		$schema = NULL;
-		if (isset($this->schema->properties->$key)) {
-			$schema = $this->schema->properties->$key;
-		} else if (isset($this->schema->patternProperties)) {
-			foreach ($this->schema->patternProperties as $pattern => $subSchema) {
-				if (preg_match("/".str_replace("/", "\\/", $pattern)."/", $key)) {
-					$schema = $subSchema;
-					break;
-				}
-			}
-		}
-		if (!$schema && isset($this->schema->additionalProperties)) {
-			$schema = $this->schema->additionalProperties;
-		}
-		if ($schema) {
-			if (isset($schema->default)) {
-				$this->data->$key = unserialize(serialize($schema->default));
-				return TRUE;
-			}
-			if (isset($schema->type)) {
-				$types = is_array($schema->type) ? $schema->type : array($schema->type);
-				if (in_array("null", $types)) {
-					$this->data->$key = NULL;
-				} elseif (in_array("boolean", $types)) {
-					$this->data->$key = TRUE;
-				} elseif (in_array("integer", $types) || in_array("number", $types)) {
-					$this->data->$key = 0;
-				} elseif (in_array("string", $types)) {
-					$this->data->$key = "";
-				} elseif (in_array("object", $types)) {
-					$this->data->$key = new StdClass;
-				} elseif (in_array("array", $types)) {
-					$this->data->$key = array();
-				} else {
-					return FALSE;
-				}
-			}
-			return TRUE;
-		}
-		return FALSE;
-	}
 }
 
 class Jsv4Error extends Exception {
@@ -550,4 +511,3 @@ class Jsv4Error extends Exception {
 	}
 }
 
-?>
